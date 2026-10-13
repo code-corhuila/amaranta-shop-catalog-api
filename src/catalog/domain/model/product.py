@@ -4,7 +4,7 @@ from datetime import datetime
 from catalog.domain.model.category import Category
 from catalog.domain.model.errors import BusinessRuleViolation
 
-_UNSET = object()
+UNSET = object()  # "not given", as opposed to None: update_details changes only what is given
 
 
 def _is_whole(value: object) -> bool:
@@ -114,19 +114,19 @@ class Product:
         self.stock_quantity += quantity
         self.updated_at = now
 
-    def update_details(self, now: datetime, name=_UNSET, description=_UNSET, category=_UNSET, price=_UNSET,
-                       image_url=_UNSET) -> None:
+    def update_details(self, now: datetime, name=UNSET, description=UNSET, category=UNSET, price=UNSET,
+                       image_url=UNSET) -> None:
         """Changes only what is given. Everything is judged before anything changes, so a failure leaves the product as it was."""
         changes = {}
-        if name is not _UNSET:
+        if name is not UNSET:
             changes["name"] = _check_name(name)
-        if description is not _UNSET:
+        if description is not UNSET:
             changes["description"] = _check_description(description)
-        if category is not _UNSET:
+        if category is not UNSET:
             changes["category"] = _check_category(category)
-        if price is not _UNSET:
+        if price is not UNSET:
             changes["price"] = _check_price(price)
-        if image_url is not _UNSET:
+        if image_url is not UNSET:
             changes["image_url"] = _check_image_url(image_url)
         for field, value in changes.items():
             setattr(self, field, value)

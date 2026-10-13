@@ -22,6 +22,15 @@ class FakeClock:
         return NOW
 
 
+class SequentialIds:
+    def __init__(self) -> None:
+        self._next = 1
+
+    def new_id(self) -> str:
+        self._next += 1
+        return f"00000000-0000-4000-8000-{self._next:012d}"
+
+
 class FakeProducts:
     """A product repository in a dict, with the same atomic contract as the real one."""
 
@@ -39,6 +48,19 @@ class FakeProducts:
     def find_active_page(self, page, limit) -> Page:
         active = sorted((p for p in self.by_id.values() if p.is_active), key=lambda p: (p.name, p.id))
         return Page(active[(page - 1) * limit: page * limit], page, limit, len(active))
+
+    def find_by_sku(self, sku):
+        return next((p for p in self.by_id.values() if p.sku == sku), None)
+
+    def find_all_page(self, page, limit) -> Page:
+        everything = sorted(self.by_id.values(), key=lambda p: (p.name, p.id))
+        return Page(everything[(page - 1) * limit: page * limit], page, limit, len(everything))
+
+    def save(self, product) -> None:
+        self.by_id[product.id] = product
+
+    def delete_by_id(self, product_id) -> None:
+        self.by_id.pop(product_id, None)
 
     def try_decrement_stock(self, product_id, quantity, now) -> bool:
         self.decrements += 1
