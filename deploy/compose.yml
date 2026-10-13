@@ -1,0 +1,22 @@
+# The catalog service only. amaranta-shop-infra-mongo includes this file to compose the platform.
+# It connects with its own user, catalog_app, on its own database, never with the administrator (Annex J, J.4).
+name: amaranta-shop-catalog-api
+
+services:
+  catalog-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      PORT: "8082"
+      MONGODB_URI: mongodb://catalog_app:${CATALOG_APP_PASSWORD:?set CATALOG_APP_PASSWORD in the environment file}@mongo:27017/catalog?authSource=catalog
+      # Public key of amaranta-shop-security, one line with \n escapes.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?set JWT_PUBLIC_KEY, the public key of amaranta-shop-security}
+    # expose, not ports: only the gateway is reachable from the host. The /internal routes are never published there.
+    expose: ["8082"]
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform
+    external: true
