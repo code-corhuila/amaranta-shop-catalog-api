@@ -69,6 +69,28 @@ def test_the_seed_of_catalog_db_is_readable_by_the_service(repository):
     assert [(p.sku, p.price) for p in found] == [("FOOD-001", 189_000)]
 
 
+def test_one_product_is_read_back_whole(repository, admin):
+    product_id = admin(7, name="Whole product")
+
+    product = repository.find_by_id(product_id)
+
+    assert (product.name, product.price, product.stock_quantity, product.is_active) == ("Whole product", 1_000, 7, True)
+    assert product.created_at == NOW and repository.find_by_id(str(uuid.uuid4())) is None
+
+
+def test_the_active_products_come_sorted_by_name_in_bounded_pages(repository, admin):
+    admin(1, name="~zz last"), admin(1, name="~zz middle"), admin(1, name="~aa first"), admin(1, active=False, name="~hidden")
+
+    everything = repository.find_active_page(1, 100)
+    mine = [p.name for p in everything.data if p.name.startswith("~")]
+    one = repository.find_active_page(1, 1)
+
+    assert mine == ["~aa first", "~zz last", "~zz middle"]                # sorted, the inactive one left out
+    assert [p.name for p in everything.data] == sorted(p.name for p in everything.data)
+    assert len(one.data) == 1 and one.total == everything.total and one.total_pages == everything.total
+    assert everything.total >= 13                                          # the ten seeded products and my three
+
+
 def test_taking_units_decrements_in_one_write_and_keeps_the_type_long(repository, admin):
     product_id = admin(10)
 
