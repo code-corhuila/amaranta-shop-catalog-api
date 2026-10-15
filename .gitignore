@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+.idea/
+
+# Real environment files, keys and secrets are never versioned (norm 5.1 and rule 13).
+.env
+.env.*
+!.env.example
+keys/
+*.pem
