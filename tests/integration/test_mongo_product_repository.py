@@ -17,7 +17,9 @@ from pymongo import MongoClient
 from catalog.adapter.outbound.persistence.mongo import MongoProductRepository
 from catalog.application.port.inbound.stock import StockItem
 from catalog.application.usecase.reserve_stock import ReserveStockService
+from catalog.domain.model.category import Category
 from catalog.domain.model.errors import BusinessRuleViolation
+from catalog.domain.model.product import Product
 
 URI = os.environ.get("TEST_MONGODB_URI")
 ADMIN_URI = os.environ.get("TEST_MONGODB_ADMIN_URI")
@@ -51,6 +53,7 @@ def admin():
         return product_id
 
     add.raw = lambda product_id: collection.find_one({"_id": product_id})
+    add.track = created.append   # a product the service itself created: the administrator removes it afterwards
     yield add
     collection.delete_many({"_id": {"$in": created}})
 
@@ -89,6 +92,51 @@ def test_the_active_products_come_sorted_by_name_in_bounded_pages(repository, ad
     assert [p.name for p in everything.data] == sorted(p.name for p in everything.data)
     assert len(one.data) == 1 and one.total == everything.total and one.total_pages == everything.total
     assert everything.total >= 13                                          # the ten seeded products and my three
+
+
+def test_a_product_saved_by_the_service_reads_back_whole_with_long_money(repository, admin):
+    product = Product.create(product_id=str(uuid.uuid4()), sku="IT-SAVE-" + uuid.uuid4().hex[:6], name="Saved", description="d",
+                             category=Category.TOYS, price=2_500, stock_quantity=6, image_url="https://example.test/s.png", now=NOW)
+    admin.track(product.id)
+
+    repository.save(product)
+    product.update_details(NOW, price=3_000)
+    repository.save(product)   # the second save replaces, it does not duplicate
+
+    raw = admin.raw(product.id)
+    assert raw["price"] == 3_000 and isinstance(raw["price"], Int64) and isinstance(raw["stockQuantity"], Int64)
+    assert repository.find_by_sku(product.sku).id == product.id and repository.find_by_sku("nope-nope") is None
+
+
+def test_the_unique_sku_is_enforced_by_the_database_not_only_by_the_use_case(repository, admin):
+    first = Product.create(product_id=str(uuid.uuid4()), sku="IT-DUP-" + uuid.uuid4().hex[:6], name="One", description="",
+                           category=Category.FOOD, price=1_000, stock_quantity=1, image_url="https://example.test/1.png", now=NOW)
+    second = Product.create(product_id=str(uuid.uuid4()), sku=first.sku, name="Two", description="", category=Category.FOOD,
+                            price=1_000, stock_quantity=1, image_url="https://example.test/2.png", now=NOW)
+    admin.track(first.id)
+    repository.save(first)
+
+    with pytest.raises(BusinessRuleViolation) as raised:
+        repository.save(second)
+
+    assert raised.value.rule_id == "SKU_ALREADY_EXISTS" and admin.raw(second.id) is None
+
+
+def test_deleting_removes_the_product_and_deleting_it_again_is_harmless(repository, admin):
+    product_id = admin(1)
+
+    repository.delete_by_id(product_id)
+    repository.delete_by_id(product_id)
+
+    assert admin.raw(product_id) is None
+
+
+def test_the_administrators_list_includes_the_inactive_products(repository, admin):
+    hidden = admin(1, active=False, name="~hidden-for-admin")
+
+    names = [p.name for p in repository.find_all_page(1, 100).data]
+
+    assert "~hidden-for-admin" in names and hidden not in [p.id for p in repository.find_active_page(1, 100).data]
 
 
 def test_taking_units_decrements_in_one_write_and_keeps_the_type_long(repository, admin):
