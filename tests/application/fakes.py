@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from catalog.application.page import Page
 from catalog.domain.model.category import Category
 from catalog.domain.model.product import Product
 
@@ -34,6 +35,10 @@ class FakeProducts:
 
     def find_by_id(self, product_id):
         return self.by_id.get(product_id)
+
+    def find_active_page(self, page, limit) -> Page:
+        active = sorted((p for p in self.by_id.values() if p.is_active), key=lambda p: (p.name, p.id))
+        return Page(active[(page - 1) * limit: page * limit], page, limit, len(active))
 
     def try_decrement_stock(self, product_id, quantity, now) -> bool:
         self.decrements += 1

@@ -7,8 +7,10 @@ always written as Int64: the validator refuses a plain Python int that pymongo w
 from datetime import datetime
 
 from bson import Int64
+from pymongo import ASCENDING
 from pymongo.database import Database
 
+from catalog.application.page import Page
 from catalog.application.port.outbound.products import ProductRepository
 from catalog.domain.model.category import Category
 from catalog.domain.model.product import Product
@@ -20,6 +22,15 @@ class MongoProductRepository(ProductRepository):
 
     def find_by_ids(self, ids: list[str]) -> list[Product]:
         return [_to_product(doc) for doc in self._products.find({"_id": {"$in": ids}})]
+
+    def find_by_id(self, product_id: str) -> Product | None:
+        doc = self._products.find_one({"_id": product_id})
+        return _to_product(doc) if doc else None
+
+    def find_active_page(self, page: int, limit: int) -> Page[Product]:
+        query = {"isActive": True}
+        docs = self._products.find(query).sort([("name", ASCENDING), ("_id", ASCENDING)]).skip((page - 1) * limit).limit(limit)
+        return Page([_to_product(d) for d in docs], page, limit, self._products.count_documents(query))
 
     def try_decrement_stock(self, product_id: str, quantity: int, now: datetime) -> bool:
         # One conditional write on one document: active AND enough stock. Two requests for the last unit race the
