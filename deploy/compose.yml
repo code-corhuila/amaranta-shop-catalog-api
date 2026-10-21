@@ -7,8 +7,12 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        SERVICE_VERSION: ${SERVICE_VERSION:-dev}
     environment:
       PORT: "8082"
+      # dev, qa or main: it is on every log line, to keep the data of the three environments apart.
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
       MONGODB_URI: mongodb://catalog_app:${CATALOG_APP_PASSWORD:?set CATALOG_APP_PASSWORD in the environment file}@mongo:27017/catalog?authSource=catalog
       # Public key of amaranta-shop-security, one line with \n escapes.
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?set JWT_PUBLIC_KEY, the public key of amaranta-shop-security}

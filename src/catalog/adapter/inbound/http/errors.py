@@ -76,5 +76,10 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, error: Exception):
-        LOG.error("unhandled error", exc_info=error)
+        # This handler runs after the request's context has ended, so the ids come from the request itself.
+        trace = getattr(request.state, "trace", None)
+        LOG.error("unhandled error", exc_info=error,
+                  extra={"event": "http.request.failed", "http_status": 500,
+                         "correlation_id": getattr(request.state, "correlation_id", ""),
+                         "trace_id": trace.trace_id if trace else "", "span_id": trace.span_id if trace else ""})
         return envelope(request, 500, "INTERNAL_ERROR", "unexpected error")
