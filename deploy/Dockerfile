@@ -10,6 +10,10 @@ FROM python:3.12-slim
 COPY --from=build /install /usr/local
 WORKDIR /app
 COPY apps ./apps
+# The release travels with the image, so a log line always says which build wrote it:
+#   docker build --build-arg SERVICE_VERSION=2.0.0 -f deploy/Dockerfile .
+ARG SERVICE_VERSION=dev
+ENV SERVICE_VERSION=$SERVICE_VERSION
 USER 10001
 EXPOSE 8082
 CMD ["python", "-m", "apps.api"]
