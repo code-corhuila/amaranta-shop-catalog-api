@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from catalog.adapter.inbound.http.auth import Rs256Verifier, require_role
-from catalog.adapter.inbound.http.view import product_view
+from catalog.adapter.inbound.http.view import page_view, product_view
 from catalog.application.page import MAX_LIMIT
-from catalog.application.usecase.admin import AdminProducts, NewProduct
+from catalog.application.port.inbound.products import AdminProductPorts, NewProduct, ProductChanges
 from catalog.domain.model.category import Category
 
 BASE = "/api/v1/admin/products"
@@ -51,42 +51,41 @@ def _admin_view(product) -> dict:
     return {**product_view(product), "isActive": product.is_active}
 
 
-def admin_router(admin: AdminProducts, verifier: Rs256Verifier) -> APIRouter:
+def admin_router(admin: AdminProductPorts, verifier: Rs256Verifier) -> APIRouter:
     router = APIRouter(prefix=BASE, dependencies=[Depends(require_role("ADMIN", verifier=verifier))])
 
     @router.get("")
     def list_all(page: Annotated[int, Query(ge=1)] = 1, limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 20) -> dict:
-        result = admin.list_all(page, limit)
-        return {"data": [_admin_view(p) for p in result.data],
-                "meta": {"page": result.page, "limit": result.limit, "total": result.total, "totalPages": result.total_pages}}
+        return page_view(admin.list_all.execute(page, limit), _admin_view)
 
     @router.post("", status_code=201)
     def create(body: CreateBody, response: Response) -> dict:
-        product = admin.create(NewProduct(sku=body.sku, name=body.name, description=body.description, category=body.category,
-                                          price=body.price, stock_quantity=body.stock_quantity, image_url=body.image_url))
+        product = admin.create.execute(NewProduct(sku=body.sku, name=body.name, description=body.description,
+                                                  category=body.category, price=body.price,
+                                                  stock_quantity=body.stock_quantity, image_url=body.image_url))
         response.headers["Location"] = f"{BASE}/{product.id}"
         return _admin_view(product)
 
     @router.patch("/{product_id}")
     def update(product_id: uuid.UUID, body: UpdateBody) -> dict:
         given = {name: getattr(body, name) for name in body.model_fields_set}
-        return _admin_view(admin.update(str(product_id), **given))
+        return _admin_view(admin.update.execute(str(product_id), ProductChanges(**given)))
 
     @router.patch("/{product_id}/stock")
     def set_stock(product_id: uuid.UUID, body: StockBody) -> dict:
-        return _admin_view(admin.set_stock(str(product_id), body.stock_quantity))
+        return _admin_view(admin.set_stock.execute(str(product_id), body.stock_quantity))
 
     @router.post("/{product_id}/activate")
     def activate(product_id: uuid.UUID) -> dict:
-        return _admin_view(admin.set_active(str(product_id), True))
+        return _admin_view(admin.activate.execute(str(product_id)))
 
     @router.post("/{product_id}/deactivate")
     def deactivate(product_id: uuid.UUID) -> dict:
-        return _admin_view(admin.set_active(str(product_id), False))
+        return _admin_view(admin.deactivate.execute(str(product_id)))
 
     @router.delete("/{product_id}", status_code=204)
     def delete(product_id: uuid.UUID) -> Response:
-        admin.delete(str(product_id))
+        admin.delete.execute(str(product_id))
         return Response(status_code=204)
 
     return router
