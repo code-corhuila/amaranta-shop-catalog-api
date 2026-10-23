@@ -19,7 +19,7 @@ from catalog.adapter.inbound.http.internal import internal_router
 from catalog.adapter.inbound.http.public import public_router
 from catalog.adapter.outbound.persistence.mongo import MongoProductRepository
 from catalog.application.port.outbound.products import ProductRepository
-from catalog.application.usecase.admin import AdminProducts
+from catalog.application.usecase.admin import build_admin_ports
 from catalog.application.usecase.browse import GetProductService, ListActiveProductsService
 from catalog.application.usecase.release_stock import ReleaseStockService
 from catalog.application.usecase.reserve_stock import ReserveStockService
@@ -51,5 +51,5 @@ def build_app(settings: Settings, products: ProductRepository | None = None, clo
     return create_app(routers=[
         public_router(ListActiveProductsService(products), GetProductService(products)),
         internal_router(ReserveStockService(products, clock), ReleaseStockService(products, clock)),
-        admin_router(AdminProducts(products, clock, ids), verifier),
+        admin_router(build_admin_ports(products, clock, ids), verifier),
     ])
