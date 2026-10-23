@@ -45,3 +45,19 @@ def test_the_core_never_imports_an_adapter():
 
 def test_the_architecture_test_can_see_the_core():
     assert core_files(), "no core files found: the paths of this test are wrong, so it would pass for nothing"
+
+
+# The inbound adapter (Annex C): it depends on the inbound ports, which are what the service offers, and never on the
+# classes that implement them. That keeps a use case replaceable and lets the HTTP tests hand in any implementation.
+HTTP_ADAPTER = SRC / "adapter" / "inbound" / "http"
+
+
+def test_the_http_adapter_depends_on_inbound_ports_not_on_use_case_classes():
+    offenders = {str(p.relative_to(SRC)): [m for m in imported_modules(p) if m.startswith("catalog.application.usecase")]
+                 for p in HTTP_ADAPTER.rglob("*.py")}
+    offenders = {path: modules for path, modules in offenders.items() if modules}
+    assert offenders == {}, f"the HTTP adapter imports a use case class instead of its inbound port: {offenders}"
+
+
+def test_the_architecture_test_can_see_the_http_adapter():
+    assert list(HTTP_ADAPTER.rglob("*.py")), "no adapter files found: the path of this test is wrong, so it would pass for nothing"

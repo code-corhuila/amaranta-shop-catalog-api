@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from catalog.adapter.inbound.http.admin import admin_router
 from catalog.adapter.inbound.http.app import create_app
 from catalog.adapter.inbound.http.auth import Rs256Verifier
-from catalog.application.usecase.admin import AdminProducts
+from catalog.application.usecase.admin import build_admin_ports
 from tests.application.fakes import DOG_FOOD, UNKNOWN, FakeClock, FakeProducts, SequentialIds, product
 from tests.http.signing import NOW, PUBLIC_PEM, bearer
 
@@ -22,7 +22,7 @@ def products() -> FakeProducts:
 
 @pytest.fixture
 def client(products) -> TestClient:
-    router = admin_router(AdminProducts(products, FakeClock(), SequentialIds()), Rs256Verifier(PUBLIC_PEM, clock=lambda: NOW))
+    router = admin_router(build_admin_ports(products, FakeClock(), SequentialIds()), Rs256Verifier(PUBLIC_PEM, clock=lambda: NOW))
     return TestClient(create_app(routers=[router]), raise_server_exceptions=False)
 
 
