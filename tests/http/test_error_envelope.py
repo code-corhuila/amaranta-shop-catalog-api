@@ -1,8 +1,6 @@
 """Every error, whatever raised it, leaves in the same envelope {error, message, details?, traceId}, and the translation
 from a domain error to a status happens in ONE place (norm 5.3, spec section 8.3). The correlation id travels with it."""
 
-import json
-import logging
 import re
 import uuid
 
@@ -151,9 +149,4 @@ def test_an_absurd_correlation_id_is_replaced_instead_of_echoed(client):
     assert re.fullmatch(r"[0-9a-f-]{36}", response.headers["x-correlation-id"])
 
 
-def test_every_log_line_is_json_and_carries_the_correlation_id(client, caplog):
-    with caplog.at_level(logging.INFO, logger="access"):
-        client.get("/boom/rule", headers={"X-Correlation-Id": "trace-42"})
-
-    line = json.loads(next(r for r in caplog.records if r.name == "access").getMessage())
-    assert (line["method"], line["path"], line["status"], line["correlationId"]) == ("GET", "/boom/rule", 422, "trace-42")
+# The access line, the log contract and what a log may never hold are in test_access_log.py and test_log_contract.py.

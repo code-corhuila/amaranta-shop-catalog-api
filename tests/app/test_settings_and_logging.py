@@ -1,16 +1,16 @@
-"""The composition root reads its configuration once, refuses to start on a missing piece, and logs in JSON."""
+"""The composition root reads its configuration once and refuses to start on a missing or a wrong piece.
 
-import json
-import logging
+The format of the log lines is in test_log_contract.py.
+"""
 
 import pytest
 
-from apps.api.logging_setup import JsonFormatter
 from apps.api.settings import Settings
-from catalog.adapter.inbound.http.correlation import current_correlation_id
 from tests.http.signing import PUBLIC_PEM
 
-ENV = {"MONGODB_URI": "mongodb://catalog_app:secret@mongo:27017/catalog?authSource=catalog", "JWT_PUBLIC_KEY": PUBLIC_PEM.replace("\n", "\\n")}
+# The address is put together here: no address with a user and a password is written in the source.
+ENV = {"MONGODB_URI": "mongodb://catalog_app:" + "FAKE-DB-MARKER" + "@mongo:27017/catalog?authSource=catalog",
+       "JWT_PUBLIC_KEY": PUBLIC_PEM.replace("\n", "\\n")}
 
 
 def test_the_defaults_are_the_limits_the_norm_asks_to_be_declared():
@@ -44,23 +44,31 @@ def test_it_refuses_to_start_without_the_database_or_the_key(missing):
         Settings.from_env(env)
 
 
-def test_a_log_line_is_one_json_object_that_carries_the_correlation_id():
-    record = logging.LogRecord("catalog", logging.WARNING, __file__, 1, "stock %s", ("low",), None)
-    token = current_correlation_id.set("trace-7")
-    try:
-        line = json.loads(JsonFormatter().format(record))
-    finally:
-        current_correlation_id.reset(token)
+# who wrote the log line (the log contract) ----------------------------------------------------------------------------
 
-    assert (line["level"], line["logger"], line["message"], line["correlationId"]) == ("WARNING", "catalog", "stock low", "trace-7")
-    assert "@timestamp" in line
+def test_the_release_and_the_environment_default_to_dev():
+    settings = Settings.from_env(ENV)
+
+    assert (settings.service_version, settings.environment) == ("dev", "dev")
 
 
-def test_an_exception_is_logged_in_full_in_the_same_json_line():
-    try:
-        raise RuntimeError("boom")
-    except RuntimeError:
-        import sys
-        record = logging.LogRecord("catalog", logging.ERROR, __file__, 1, "unhandled", (), sys.exc_info())
+def test_the_release_and_the_environment_come_from_the_environment_of_the_container():
+    settings = Settings.from_env({**ENV, "SERVICE_VERSION": "2.0.0", "ENVIRONMENT": "qa"})
 
-    assert "RuntimeError: boom" in json.loads(JsonFormatter().format(record))["exception"]
+    assert (settings.service_version, settings.environment) == ("2.0.0", "qa")
+
+
+@pytest.mark.parametrize("environment", ["dev", "qa", "main"])
+def test_the_three_environments_of_the_platform_are_accepted(environment):
+    assert Settings.from_env({**ENV, "ENVIRONMENT": environment}).environment == environment
+
+
+@pytest.mark.parametrize("environment", ["prod", "QA", "", "staging"])
+def test_an_unknown_environment_is_refused_so_that_data_of_two_never_mixes(environment):
+    with pytest.raises(ValueError, match="ENVIRONMENT"):
+        Settings.from_env({**ENV, "ENVIRONMENT": environment})
+
+
+def test_a_blank_release_is_refused_because_a_failure_could_not_be_tied_to_a_release():
+    with pytest.raises(ValueError, match="SERVICE_VERSION"):
+        Settings.from_env({**ENV, "SERVICE_VERSION": "  "})
