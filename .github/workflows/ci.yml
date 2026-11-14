@@ -1,0 +1,81 @@
+name: CI
+
+# Every pull request builds the repository and runs its tests on a clean machine.
+# "It works on my computer" is not evidence; a green check here is.
+
+on:
+  pull_request:
+    branches: [develop, qa, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The repository has its minimum content
+        run: |
+          for file in README.md .github/CODEOWNERS .gitignore .env.example pyproject.toml deploy/Dockerfile deploy/compose.yml; do
+            [ -f "$file" ] || { echo "missing $file"; exit 1; }
+          done
+
+      - name: No real environment file or key is versioned
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|\.pem$|(^|/)keys/'; then
+            echo "A real environment file or key is versioned"
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Includes tests/test_architecture.py: the core imports no framework and no driver (norm 5.3.3).
+      - run: pytest
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: The container image builds
+        run: docker build -f deploy/Dockerfile -t catalog-api:ci .
+
+  # The two checks that need the database of catalog-db and a Docker daemon: the repository against a real MongoDB,
+  # and the service as a container. They run when the repository variable CATALOG_DB_CHECKOUT is "true", which the team
+  # sets once the organization lets this workflow read amaranta-shop-catalog-db. Without it they do not run in CI, and
+  # scripts/integration-test.sh and scripts/smoke-test.sh run the same on a laptop.
+  with-the-database:
+    if: ${{ vars.CATALOG_DB_CHECKOUT == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: catalog-api
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/amaranta-shop-catalog-db
+          ref: develop
+          token: ${{ secrets.CATALOG_DB_READ_TOKEN || github.token }}
+          path: amaranta-shop-catalog-db
+      - name: Repository against MongoDB, as catalog_app
+        run: bash catalog-api/scripts/integration-test.sh
+      - name: The service as a container
+        run: bash catalog-api/scripts/smoke-test.sh
